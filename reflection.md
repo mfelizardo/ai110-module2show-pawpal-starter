@@ -2,10 +2,30 @@
 
 ## 1. System Design
 
+3 Core Actions
+1. User should be able to enter their own personal info (ex. name) and info relating to their pet (ex. pet name, breed)
+2. User should be able to add or edit tasks for their pet. An example task could be "walking their pet". Each task should have at least a specified duration and priority 
+3. User should be able to generate and see a daily schedule based on the tasks assigned to their pet (prioritizing tasks with higher priority)
+
 **a. Initial design**
 
 - Briefly describe your initial UML design.
 - What classes did you include, and what responsibilities did you assign to each?
+
+The initial UML design should have at least 4 objects, Pet Owner, Pet, Task, and Schedule.
+- The Pet Owner (or Owner) class should contain 
+  - attributes: name and a Pet object
+  - methods: edit name, edit basic pet info (ex. pet name), add task, edit task, generate daily schedule
+- The Pet class should contain
+  - attributes: name, breed, and list of Tasks
+  - methods: None
+- The Task class should contain
+  - attributes: task name, duration, priority
+  - methods: None
+- The Schedule class should contain
+  - attributes: pet name, pet breed, and properly ordered list of Tasks sorted by Task priority (all provided by a Pet object)
+  - methods: None
+
 
 **b. Design changes**
 

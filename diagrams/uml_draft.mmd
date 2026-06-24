@@ -1,0 +1,33 @@
+classDiagram
+    class Owner {
+        +String name
+        +Pet pet
+        +editName(newName: String) void
+        +editBasicPetInfo(petName: String) void
+        +addTask(task: Task) void
+        +editTask(oldTask: Task, newTask: Task) void
+        +generateDailySchedule() Schedule
+    }
+
+    class Pet {
+        +String name
+        +String breed
+        +List~Task~ tasks
+    }
+
+    class Task {
+        +String taskName
+        +int duration
+        +int priority
+    }
+
+    class Schedule {
+        +String petName
+        +String petBreed
+        +List~Task~ orderedTasks
+    }
+
+    Owner "1" --> "1" Pet : owns
+    Pet "1" --> "0..*" Task : has
+    Owner ..> Schedule : generates
+    Schedule ..> Pet : built from
