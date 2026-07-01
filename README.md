@@ -54,6 +54,27 @@ Paste a sample of your app's CLI or Streamlit output here so a reader can see wh
 #   ...
 ```
 
+```
+Today's Schedule for Jordan's pets
+
+-- Biscuit (Golden Retriever) --
+  08:15  Feeding         (priority=3, 10 min)
+  08:00  Morning walk    (priority=2, 30 min)
+  18:00  Evening walk    (priority=1, 20 min)
+
+-- Mochi (Tabby Cat) --
+  08:15  Feeding         (priority=3, 10 min)
+  08:05  Litter box      (priority=1, 15 min)
+  08:10  Grooming        (priority=1, 15 min)
+
+Conflicts detected:
+  Biscuit's 'Feeding' overlaps with Mochi's 'Litter box'
+  Biscuit's 'Feeding' overlaps with Mochi's 'Grooming'
+  Biscuit's 'Morning walk' overlaps with Mochi's 'Feeding'
+  Biscuit's 'Morning walk' overlaps with Mochi's 'Litter box'
+  Biscuit's 'Morning walk' overlaps with Mochi's 'Grooming'
+```
+
 ## 🧪 Testing PawPal+
 
 ```bash
