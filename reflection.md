@@ -32,6 +32,8 @@ The initial UML design should have at least 4 objects, Pet Owner, Pet, Task, and
 - Did your design change during implementation?
 - If yes, describe at least one change and why you made it.
 
+I did make multiple design changes, thanks to the feedback from my AI Agent. One change that was made was changing the relationship of Owner --> Pet from one-to-one to one-to-many. As a result, the Owner class no longer has an attribute for only one Pet, but a list to support multiple Pets. This change makes sense because it is unreasonable to believe that all Owners who would like to use the app only have one pet. Another change was the addition of the ID fields for Task and Pet objects, in order to properly identify seperate objects, since for example it is unlikely but not impossible for an Owner to have more than 1 pet with the same name, breed, and task list so an ID field will help reference the correct one when needed.
+
 ---
 
 ## 2. Scheduling Logic and Tradeoffs
