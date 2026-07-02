@@ -40,16 +40,17 @@ print(f"Today's Schedule for {owner.name}'s pets\n")
 
 for pet_schedule in combined.pet_schedules.values():
     print(f"-- {pet_schedule.pet.name} ({pet_schedule.pet.breed}) --")
-    for task in pet_schedule.ordered_tasks:
-        print(f"  {task.due_time}  {task.description:<15} (priority={task.priority}, {task.duration} min)")
+    for occurrence in pet_schedule.occurrences:
+        task = occurrence.task
+        print(f"  {occurrence.start_time}  {task.description:<15} (priority={task.priority}, {task.duration} min)")
     print()
 
 if combined.conflicts:
     print("Conflicts detected:")
     for conflict in combined.conflicts:
         print(
-            f"  {conflict.pet_a.name}'s '{conflict.task_a.description}' overlaps "
-            f"with {conflict.pet_b.name}'s '{conflict.task_b.description}'"
+            f"  {conflict.pet_a.name}'s '{conflict.task_a.description}' ({conflict.start_a}) overlaps "
+            f"with {conflict.pet_b.name}'s '{conflict.task_b.description}' ({conflict.start_b})"
         )
 else:
     print("No conflicts detected.")

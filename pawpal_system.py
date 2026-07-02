@@ -12,6 +12,14 @@ def _time_to_minutes(due_time: str) -> int:
     return int(hours) * 60 + int(minutes)
 
 
+def _minutes_to_time(minutes: int) -> str:
+    return f"{minutes // 60:02d}:{minutes % 60:02d}"
+
+
+DAY_START_MINUTES = _time_to_minutes("08:00")
+DAY_END_MINUTES = _time_to_minutes("20:00")
+
+
 @dataclass
 class Task:
     description: str
@@ -31,12 +39,18 @@ class Task:
         """Mark this task as not completed."""
         self.completed = False
 
-    def time_window(self) -> Optional[tuple]:
-        """Return the (start, end) minute range the task occupies, or None if it has no due time."""
-        if self.due_time is None:
-            return None
-        start = _time_to_minutes(self.due_time)
-        return start, start + self.duration
+
+@dataclass
+class ScheduledTask:
+    """A task placed at a specific time, whether from its own due_time or auto-assigned by the Scheduler."""
+
+    task: Task
+    start_time: str
+
+    def time_window(self) -> tuple:
+        """Return the (start, end) minute range this occurrence occupies."""
+        start = _time_to_minutes(self.start_time)
+        return start, start + self.task.duration
 
 
 @dataclass
@@ -66,7 +80,7 @@ class Pet:
 @dataclass
 class Schedule:
     pet: Pet
-    ordered_tasks: List[Task] = field(default_factory=list)
+    occurrences: List[ScheduledTask] = field(default_factory=list)
 
 
 @dataclass
@@ -75,6 +89,8 @@ class ScheduleConflict:
     task_a: Task
     pet_b: Pet
     task_b: Task
+    start_a: str
+    start_b: str
 
 
 @dataclass
@@ -152,45 +168,116 @@ class Scheduler:
         """Return only the tasks that are not yet completed."""
         return [t for t in tasks if not t.completed]
 
-    def order_tasks(self, tasks: List[Task]) -> List[Task]:
-        """Sort tasks by descending priority, then due time, then duration."""
-        return sorted(tasks, key=lambda t: (-t.priority, t.due_time or "", t.duration))
+    def _occurrences_conflict(self, task_a: Task, start_a: int, task_b: Task, start_b: int) -> bool:
+        """Return True if the two windows overlap and the tasks aren't mutually okay with that."""
+        if task_a.concurrent_ok and task_b.concurrent_ok:
+            return False
+        end_a = start_a + task_a.duration
+        end_b = start_b + task_b.duration
+        return start_a < end_b and start_b < end_a
 
-    def find_conflicts(self, pet_tasks: List[tuple]) -> List[ScheduleConflict]:
-        """Flag overlapping time windows between tasks of different pets, unless both are concurrent_ok."""
+    def _find_earliest_slot(self, task: Task, occupied: List[tuple]) -> Optional[int]:
+        """Return the earliest start minute within the day that fits task without conflicting with occupied."""
+        start = DAY_START_MINUTES
+        while start + task.duration <= DAY_END_MINUTES:
+            if not any(self._occurrences_conflict(task, start, o_task, o_start) for o_task, o_start in occupied):
+                return start
+            start += 1
+        return None
+
+    def _find_nearest_slot(self, task: Task, ideal: int, occupied: List[tuple]) -> Optional[int]:
+        """Return the start minute closest to ideal (within the day) that doesn't conflict with occupied."""
+        ideal = max(DAY_START_MINUTES, min(ideal, DAY_END_MINUTES - task.duration))
+        max_radius = DAY_END_MINUTES - DAY_START_MINUTES
+        for radius in range(max_radius + 1):
+            for candidate in {ideal - radius, ideal + radius}:
+                if candidate < DAY_START_MINUTES or candidate + task.duration > DAY_END_MINUTES:
+                    continue
+                if not any(
+                    self._occurrences_conflict(task, candidate, o_task, o_start) for o_task, o_start in occupied
+                ):
+                    return candidate
+        return None
+
+    def assign_schedule(self, tasks: List[Task]) -> List[ScheduledTask]:
+        """Resolve a start time for every task.
+
+        Tasks with a fixed due_time keep it. Tasks without one are auto-assigned the
+        earliest free slot between 08:00-20:00; if their frequency is greater than 1,
+        that many slots are spread evenly across the day instead, nudged to the
+        nearest free time when their ideal slot conflicts with something else.
+        """
+        fixed = [t for t in tasks if t.due_time is not None]
+        flexible = sorted((t for t in tasks if t.due_time is None), key=lambda t: -t.priority)
+
+        occupied: List[tuple] = [(t, _time_to_minutes(t.due_time)) for t in fixed]
+        occurrences: List[ScheduledTask] = [ScheduledTask(task=t, start_time=t.due_time) for t in fixed]
+
+        for task in flexible:
+            slot_count = max(1, task.frequency)
+            if slot_count == 1:
+                start = self._find_earliest_slot(task, occupied)
+                if start is None:
+                    start = DAY_START_MINUTES
+                occupied.append((task, start))
+                occurrences.append(ScheduledTask(task=task, start_time=_minutes_to_time(start)))
+            else:
+                span = DAY_END_MINUTES - DAY_START_MINUTES - task.duration
+                for i in range(slot_count):
+                    ideal = DAY_START_MINUTES + round(i * span / (slot_count - 1))
+                    start = self._find_nearest_slot(task, ideal, occupied)
+                    if start is None:
+                        start = ideal
+                    occupied.append((task, start))
+                    occurrences.append(ScheduledTask(task=task, start_time=_minutes_to_time(start)))
+
+        return sorted(occurrences, key=lambda o: (o.start_time, -o.task.priority, o.task.duration))
+
+    def find_conflicts(self, pet_occurrences: List[tuple]) -> List[ScheduleConflict]:
+        """Flag overlapping time windows between any two occurrences (same pet or different pets), unless both are concurrent_ok."""
         conflicts: List[ScheduleConflict] = []
-        for i, (pet_a, task_a) in enumerate(pet_tasks):
-            window_a = task_a.time_window()
-            if window_a is None:
-                continue
-            for pet_b, task_b in pet_tasks[i + 1 :]:
-                if pet_a.pet_id == pet_b.pet_id:
+        for i, (pet_a, occurrence_a) in enumerate(pet_occurrences):
+            window_a = occurrence_a.time_window()
+            for pet_b, occurrence_b in pet_occurrences[i + 1 :]:
+                if occurrence_a.task.concurrent_ok and occurrence_b.task.concurrent_ok:
                     continue
-                if task_a.concurrent_ok and task_b.concurrent_ok:
-                    continue
-                window_b = task_b.time_window()
-                if window_b is None:
-                    continue
+                window_b = occurrence_b.time_window()
                 if window_a[0] < window_b[1] and window_b[0] < window_a[1]:
-                    conflicts.append(ScheduleConflict(pet_a, task_a, pet_b, task_b))
+                    conflicts.append(
+                        ScheduleConflict(
+                            pet_a,
+                            occurrence_a.task,
+                            pet_b,
+                            occurrence_b.task,
+                            occurrence_a.start_time,
+                            occurrence_b.start_time,
+                        )
+                    )
         return conflicts
 
     def generate_pet_schedule(self, pet_id: str, include_completed: bool = False) -> Schedule:
-        """Build an ordered schedule of one pet's tasks."""
+        """Build an ordered schedule of one pet's tasks, auto-assigning times where needed."""
         pet = self.owner.get_pet(pet_id)
         tasks = pet.list_tasks() if include_completed else self.filter_pending(pet.list_tasks())
-        return Schedule(pet=pet, ordered_tasks=self.order_tasks(tasks))
+        return Schedule(pet=pet, occurrences=self.assign_schedule(tasks))
 
     def generate_combined_schedule(self, include_completed: bool = False) -> CombinedSchedule:
-        """Build per-pet schedules for all pets and detect conflicts across them."""
-        pet_schedules = {
-            pet_id: self.generate_pet_schedule(pet_id, include_completed=include_completed)
-            for pet_id in self.owner.pets
-        }
-        pet_tasks = [
-            (schedule.pet, task)
-            for schedule in pet_schedules.values()
-            for task in schedule.ordered_tasks
-        ]
+        """Build per-pet schedules for all pets, auto-assigning times with awareness of every pet's tasks, and detect conflicts across them."""
+        pet_by_task_id: Dict[str, Pet] = {}
+        all_tasks: List[Task] = []
+        for pet in self.owner.list_pets():
+            tasks = pet.list_tasks() if include_completed else self.filter_pending(pet.list_tasks())
+            for task in tasks:
+                pet_by_task_id[task.task_id] = pet
+                all_tasks.append(task)
+
+        occurrences = self.assign_schedule(all_tasks)
+
+        pet_schedules = {pet_id: Schedule(pet=pet) for pet_id, pet in self.owner.pets.items()}
+        for occurrence in occurrences:
+            pet = pet_by_task_id[occurrence.task.task_id]
+            pet_schedules[pet.pet_id].occurrences.append(occurrence)
+
+        pet_tasks = [(pet_by_task_id[occurrence.task.task_id], occurrence) for occurrence in occurrences]
         conflicts = self.find_conflicts(pet_tasks)
         return CombinedSchedule(owner=self.owner, pet_schedules=pet_schedules, conflicts=conflicts)

@@ -259,19 +259,20 @@ try:
 
         for pet_schedule in combined.pet_schedules.values():
             st.markdown(f"**{pet_schedule.pet.name}** ({pet_schedule.pet.breed})")
-            if not pet_schedule.ordered_tasks:
+            if not pet_schedule.occurrences:
                 st.write("No pending tasks.")
                 continue
-            for task in pet_schedule.ordered_tasks:
-                due_label = task.due_time or "no fixed time"
-                st.write(f"  {due_label}  {task.description} ({task.duration} min)")
+            for occurrence in pet_schedule.occurrences:
+                task = occurrence.task
+                auto_label = "" if task.due_time else " (auto-assigned)"
+                st.write(f"  {occurrence.start_time}  {task.description} ({task.duration} min){auto_label}")
 
         if combined.conflicts:
             st.warning("Scheduling conflicts detected:")
             for conflict in combined.conflicts:
                 st.write(
-                    f"- {conflict.pet_a.name}'s '{conflict.task_a.description}' overlaps "
-                    f"with {conflict.pet_b.name}'s '{conflict.task_b.description}'"
+                    f"- {conflict.pet_a.name}'s '{conflict.task_a.description}' ({conflict.start_a}) overlaps "
+                    f"with {conflict.pet_b.name}'s '{conflict.task_b.description}' ({conflict.start_b})"
                 )
         else:
             st.success("No conflicts detected.")
