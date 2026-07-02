@@ -91,6 +91,32 @@ Sample test output:
 # Paste your pytest output here
 ```
 
+```
+============================================================================================================ test session starts =============================================================================================================
+platform win32 -- Python 3.13.13, pytest-9.1.1, pluggy-1.6.0
+rootdir: C:\Users\Mikey\Desktop\CodePath Courses\AI Engineering\Project2\ai110-module2show-pawpal-starter
+plugins: anyio-4.14.0
+collected 17 items                                                                                                                                                                                                                            
+
+tests\test_pawpal.py .................                                                                                                                                                                                                  [100%]
+
+============================================================================================================= 17 passed in 0.07s =============================================================================================================
+```
+
+### What the tests cover
+
+`tests/test_pawpal.py` exercises the scheduling engine end-to-end, grouped by behavior:
+
+- **Task validation** — `due_time` combined with `frequency > 1` is rejected, and `due_times` must have exactly one entry per occurrence.
+- **Sorting correctness** — a mix of due times comes back in chronological order, and occurrences with the same start time break ties by descending priority, then duration.
+- **Conflict detection** — identical/overlapping due times are flagged as conflicts, `concurrent_ok` tasks are exempt from those flags, and conflicts are detected both across pets and across a single recurring task's occurrences.
+- **Recurring tasks** — `frequency > 1` tasks are spread evenly across the day (including the `frequency = 2` boundary landing exactly at day start/end), and fixed `due_times` matching the frequency are honored.
+- **Auto-assignment & fallback** — flexible tasks take the earliest free slot, avoid conflicts across pets, and still get a (non-crashing) fallback time when the day is fully booked.
+- **Completed task handling** — completed tasks are excluded from a generated schedule by default, but included when `include_completed=True`.
+- **Basic model behavior** — `mark_complete`/`add_task` update state as expected.
+
+### Confidence Level: 5/5 stars
+
 ## 📐 Smarter Scheduling
 
 > Fill in once you've implemented scheduling logic.

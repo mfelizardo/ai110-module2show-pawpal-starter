@@ -104,3 +104,126 @@ def test_auto_assigned_tasks_avoid_conflicts_across_pets():
         "Walk",
         "Groom",
     }
+
+
+# --- Sorting correctness ---
+
+
+def test_schedule_occurrences_are_returned_in_chronological_order():
+    pet = Pet(name="Fido", breed="Labrador")
+    pet.add_task(Task(description="Evening walk", duration=15, priority=1, due_time="18:00"))
+    pet.add_task(Task(description="Morning feed", duration=15, priority=1, due_time="08:00"))
+    pet.add_task(Task(description="Midday play", duration=15, priority=1, due_time="12:00"))
+
+    schedule = _schedule_for(pet)
+
+    start_times = [o.start_time for o in schedule.occurrences]
+    assert start_times == sorted(start_times)
+    assert start_times == ["08:00", "12:00", "18:00"]
+
+
+def test_same_start_time_breaks_tie_by_priority_then_duration():
+    pet = Pet(name="Fido", breed="Labrador")
+    pet.add_task(Task(description="Low priority", duration=10, priority=1, due_time="09:00"))
+    pet.add_task(Task(description="High priority", duration=20, priority=5, due_time="09:00"))
+
+    schedule = _schedule_for(pet)
+
+    descriptions = [o.task.description for o in schedule.occurrences]
+    assert descriptions == ["High priority", "Low priority"]
+
+
+# --- Conflict detection ---
+
+
+def test_duplicate_due_times_are_flagged_as_a_conflict():
+    owner = Owner(name="Owner")
+    pet = Pet(name="Fido", breed="Labrador")
+    owner.add_pet(pet)
+    pet.add_task(Task(description="Feed", duration=15, priority=1, due_time="09:00"))
+    pet.add_task(Task(description="Medicate", duration=15, priority=1, due_time="09:00"))
+
+    combined = Scheduler(owner).generate_combined_schedule()
+
+    assert len(combined.conflicts) == 1
+    assert combined.conflicts[0].start_a == combined.conflicts[0].start_b == "09:00"
+
+
+def test_concurrent_ok_tasks_at_the_same_time_are_not_flagged():
+    owner = Owner(name="Owner")
+    pet = Pet(name="Fido", breed="Labrador")
+    owner.add_pet(pet)
+    pet.add_task(Task(description="Feed", duration=15, priority=1, due_time="09:00", concurrent_ok=True))
+    pet.add_task(Task(description="Medicate", duration=15, priority=1, due_time="09:00", concurrent_ok=True))
+
+    combined = Scheduler(owner).generate_combined_schedule()
+
+    assert combined.conflicts == []
+
+
+def test_recurring_task_occurrences_overlapping_a_fixed_task_are_each_flagged():
+    owner = Owner(name="Owner")
+    pet = Pet(name="Fido", breed="Labrador")
+    owner.add_pet(pet)
+    pet.add_task(Task(description="Fixed vet visit", duration=720, priority=1, due_time="08:00"))
+    pet.add_task(Task(description="Feeding", duration=15, priority=1, frequency=3))
+
+    combined = Scheduler(owner).generate_combined_schedule()
+
+    assert len(combined.conflicts) == 3
+    for conflict in combined.conflicts:
+        assert {conflict.task_a.description, conflict.task_b.description} == {
+            "Fixed vet visit",
+            "Feeding",
+        }
+
+
+# --- Recurring task edge cases ---
+
+
+def test_frequency_two_task_spreads_to_day_start_and_day_end():
+    pet = Pet(name="Fido", breed="Labrador")
+    pet.add_task(Task(description="Meds", duration=10, priority=1, frequency=2))
+
+    schedule = _schedule_for(pet)
+
+    start_times = sorted(o.start_time for o in schedule.occurrences)
+    assert start_times == ["08:00", "19:50"]
+
+
+def test_task_on_a_fully_booked_day_still_gets_a_fallback_time():
+    pet = Pet(name="Fido", breed="Labrador")
+    pet.add_task(Task(description="All day monitoring", duration=720, priority=1, due_time="08:00"))
+    pet.add_task(Task(description="Extra walk", duration=10, priority=1))
+
+    schedule = _schedule_for(pet)
+
+    extra = next(o for o in schedule.occurrences if o.task.description == "Extra walk")
+    assert extra.start_time == "08:00"
+
+
+# --- Completed task handling ---
+
+
+def test_completed_tasks_are_excluded_from_the_schedule_by_default():
+    pet = Pet(name="Fido", breed="Labrador")
+    task = Task(description="Feed", duration=10, priority=1, due_time="08:00")
+    task.mark_complete()
+    pet.add_task(task)
+
+    schedule = _schedule_for(pet)
+
+    assert schedule.occurrences == []
+
+
+def test_include_completed_true_still_returns_completed_tasks():
+    owner = Owner(name="Owner")
+    pet = Pet(name="Fido", breed="Labrador")
+    owner.add_pet(pet)
+    task = Task(description="Feed", duration=10, priority=1, due_time="08:00")
+    task.mark_complete()
+    pet.add_task(task)
+
+    schedule = Scheduler(owner).generate_pet_schedule(pet.pet_id, include_completed=True)
+
+    assert len(schedule.occurrences) == 1
