@@ -78,7 +78,7 @@ def init_state() -> None:
     last session left off.
     """
     if "owner" not in st.session_state:
-        st.session_state.owner = load_state() or Owner("Jordan")
+        st.session_state.owner = load_state() or Owner("")
     if "selected_pet_id" not in st.session_state:
         st.session_state.selected_pet_id = None
     if "show_schedule" not in st.session_state:

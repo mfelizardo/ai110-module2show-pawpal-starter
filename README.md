@@ -143,7 +143,7 @@ All state (owner, pets, tasks) is persisted to `pawpal_data.json` after every in
 
 This mirrors the scenario printed by `python main.py` (see the CLI output below), built up one step at a time through the UI:
 
-1. Open the app and set the owner name to "Jordan" (the default).
+1. Open the app and set the owner name to "Jordan".
 2. Add a pet, **Biscuit (Golden Retriever)**, via the "Add a pet" form — it becomes the selected pet automatically.
 3. With Biscuit selected, add three tasks:
    - "Morning walk", 30 min, Medium priority, fixed due time 08:00.
