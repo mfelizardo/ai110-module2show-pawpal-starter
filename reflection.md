@@ -43,10 +43,14 @@ I did make multiple design changes, thanks to the feedback from my AI Agent. One
 - What constraints does your scheduler consider (for example: time, priority, preferences)?
 - How did you decide which constraints mattered most?
 
+The scheduler considers a fixed day window (08:00-20:00), each task's duration, whether a task has a fixed due_time (or a list of due_times for recurring tasks), each task's priority, and whether a task is marked concurrent_ok (allowed to overlap with other concurrent_ok tasks, e.g. things that can be multi-tasked like feeding multiple pets). Fixed due times are treated as hard constraints and are never moved, since they can represent real commitments like a vet appointment. Everything without a fixed time is "flexible" and gets auto-assigned a slot: those flexible tasks are sorted by descending priority first, so the more important tasks claim their preferred (earliest, or evenly-spread for recurring tasks) slot before lower-priority tasks are fit in around them. I decided fixed times mattered most because they're hard inputs given by the pet owners, with priority being next important. Fixed due_times that have schedule conflicts will be properly alerted to the app user so they can decide to make their own adjustments.
+
 **b. Tradeoffs**
 
 - Describe one tradeoff your scheduler makes.
 - Why is that tradeoff reasonable for this scenario?
+
+One tradeoff is that the scheduler assigns flexible tasks greedily, one at a time in priority order, rather than searching for a globally optimal arrangement of the whole day. Once a higher-priority task claims a slot, that slot is locked in and every lower-priority task has to schedule around it, even if some other combination would have fit everyone with less nudging. This is reasonable for this scenario because a pet owner's daily task list shouldn't be too large (a handful of tasks per pet), so there's rarely enough contention for the greedy choice to differ meaningfully from an optimal one, and the greedy approach is fast, simple to reason about, and produces a schedule where it's obvious to the user why a task landed at a given time (it either had a fixed due_time, or it took the best remaining slot after higher-priority tasks were placed).
 
 ---
 

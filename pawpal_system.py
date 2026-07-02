@@ -53,6 +53,14 @@ class Task:
         """Mark this task as not completed."""
         self.completed = False
 
+    def fixed_due_times(self) -> List[str]:
+        """Return this task's fixed due times, or an empty list if it has none."""
+        if self.due_times is not None:
+            return self.due_times
+        if self.due_time is not None:
+            return [self.due_time]
+        return []
+
 
 @dataclass
 class ScheduledTask:
@@ -190,27 +198,17 @@ class Scheduler:
         end_b = start_b + task_b.duration
         return start_a < end_b and start_b < end_a
 
-    def _find_earliest_slot(self, task: Task, occupied: List[tuple]) -> Optional[int]:
-        """Return the earliest start minute within the day that fits task without conflicting with occupied."""
-        start = DAY_START_MINUTES
-        while start + task.duration <= DAY_END_MINUTES:
-            if not any(self._occurrences_conflict(task, start, o_task, o_start) for o_task, o_start in occupied):
-                return start
-            start += 1
-        return None
-
     def _find_nearest_slot(self, task: Task, ideal: int, occupied: List[tuple]) -> Optional[int]:
-        """Return the start minute closest to ideal (within the day) that doesn't conflict with occupied."""
+        """Return the start minute closest to ideal (within the day) that doesn't conflict with occupied.
+
+        Passing ideal=DAY_START_MINUTES finds the earliest free slot, since every
+        candidate is then at or after ideal and "closest" reduces to "earliest".
+        """
         ideal = max(DAY_START_MINUTES, min(ideal, DAY_END_MINUTES - task.duration))
-        max_radius = DAY_END_MINUTES - DAY_START_MINUTES
-        for radius in range(max_radius + 1):
-            for candidate in {ideal - radius, ideal + radius}:
-                if candidate < DAY_START_MINUTES or candidate + task.duration > DAY_END_MINUTES:
-                    continue
-                if not any(
-                    self._occurrences_conflict(task, candidate, o_task, o_start) for o_task, o_start in occupied
-                ):
-                    return candidate
+        candidates = range(DAY_START_MINUTES, DAY_END_MINUTES - task.duration + 1)
+        for candidate in sorted(candidates, key=lambda c: (abs(c - ideal), c)):
+            if not any(self._occurrences_conflict(task, candidate, o_task, o_start) for o_task, o_start in occupied):
+                return candidate
         return None
 
     def assign_schedule(self, tasks: List[Task]) -> List[ScheduledTask]:
@@ -223,14 +221,10 @@ class Scheduler:
         day instead, nudged to the nearest free time when their ideal slot
         conflicts with something else.
         """
-        fixed = [t for t in tasks if t.due_time is not None or t.due_times is not None]
-        flexible = sorted(
-            (t for t in tasks if t.due_time is None and t.due_times is None), key=lambda t: -t.priority
-        )
+        fixed = [t for t in tasks if t.fixed_due_times()]
+        flexible = sorted((t for t in tasks if not t.fixed_due_times()), key=lambda t: -t.priority)
 
-        fixed_times: List[tuple] = [
-            (t, due_time) for t in fixed for due_time in (t.due_times if t.due_times is not None else [t.due_time])
-        ]
+        fixed_times: List[tuple] = [(t, due_time) for t in fixed for due_time in t.fixed_due_times()]
         occupied: List[tuple] = [(t, _time_to_minutes(due_time)) for t, due_time in fixed_times]
         occurrences: List[ScheduledTask] = [
             ScheduledTask(task=t, start_time=due_time) for t, due_time in fixed_times
@@ -239,7 +233,7 @@ class Scheduler:
         for task in flexible:
             slot_count = max(1, task.frequency)
             if slot_count == 1:
-                start = self._find_earliest_slot(task, occupied)
+                start = self._find_nearest_slot(task, DAY_START_MINUTES, occupied)
                 if start is None:
                     start = DAY_START_MINUTES
                 occupied.append((task, start))
@@ -260,12 +254,10 @@ class Scheduler:
         """Flag overlapping time windows between any two occurrences (same pet or different pets), unless both are concurrent_ok."""
         conflicts: List[ScheduleConflict] = []
         for i, (pet_a, occurrence_a) in enumerate(pet_occurrences):
-            window_a = occurrence_a.time_window()
+            start_a, _ = occurrence_a.time_window()
             for pet_b, occurrence_b in pet_occurrences[i + 1 :]:
-                if occurrence_a.task.concurrent_ok and occurrence_b.task.concurrent_ok:
-                    continue
-                window_b = occurrence_b.time_window()
-                if window_a[0] < window_b[1] and window_b[0] < window_a[1]:
+                start_b, _ = occurrence_b.time_window()
+                if self._occurrences_conflict(occurrence_a.task, start_a, occurrence_b.task, start_b):
                     conflicts.append(
                         ScheduleConflict(
                             pet_a,
