@@ -126,6 +126,49 @@ tests\test_pawpal.py .................                                          
 | Conflict handling | `Scheduler._occurrences_conflict`, `Scheduler.find_conflicts` | Two occurrences conflict if their time windows overlap, unless both tasks are marked `concurrent_ok` (e.g. tasks that can happen alongside anything else). `find_conflicts` checks every pair of occurrences across all pets and returns a `ScheduleConflict` for each overlap. |
 | Recurring tasks | `Task.frequency`, `Task.due_times`, `Scheduler.assign_schedule` | A flexible task (no fixed time) with `frequency > 1` gets that many occurrences spread evenly across the day (`DAY_START_MINUTES`–`DAY_END_MINUTES`), nudged via `_find_nearest_slot` to the nearest free time if its ideal slot conflicts with something else. A task that *does* need fixed times for each occurrence must set `due_times` (one entry per occurrence) instead of the singular `due_time` — `Task.__post_init__` raises `ValueError` if `due_time` is combined with `frequency > 1`, or if `due_times` doesn't have exactly `frequency` entries. |
 
+## 💾 Data Persistence
+
+Streamlit reruns the entire script on every interaction (button click, form
+submit, etc.), and a browser refresh starts a brand-new session with empty
+`st.session_state`. To survive both, the `Owner` (and every `Pet`/`Task`
+hanging off it) is saved to a JSON file on disk after each interaction and
+reloaded from it whenever a session starts fresh.
+
+**Workflow:**
+
+1. **Load** — `init_state()` runs once per session. If `st.session_state` has
+   no `owner` yet, it calls `load_state()`, which reads `pawpal_data.json` (if
+   it exists and parses cleanly) and reconstructs an `Owner` object from it via
+   `owner_from_dict`. If the file is missing or corrupt, a fresh empty `Owner`
+   is created instead.
+2. **Mutate** — the rest of the script reads/writes the in-memory `Owner`
+   object directly (adding pets, editing tasks, marking tasks complete, etc.)
+   exactly as it did before persistence existed.
+3. **Save** — the whole script body runs inside a `try/finally` block, so
+   regardless of which branch executed, `save_state(owner)` always runs at the
+   end of the script. It converts the `Owner` to a plain dict via
+   `owner_to_dict`/`pet_to_dict`/`task_to_dict` and writes it as JSON to
+   `pawpal_data.json`, overwriting the previous save.
+
+Because save happens after every single rerun (not just on an explicit
+"Save" button), any change — adding a pet, checking off a task, generating a
+schedule — is immediately durable, and refreshing the page reloads exactly
+where you left off.
+
+**Files modified:**
+
+- `app.py` — added `task_to_dict`, `pet_to_dict`, `owner_to_dict`,
+  `owner_from_dict` (dataclass ⇄ dict conversion), `save_state`/`load_state`
+  (dict ⇄ JSON file I/O), and the `DATA_FILE` path constant. `init_state()`
+  and the top-level `try/finally` wire loading and saving into the app
+  lifecycle.
+- `.gitignore` — added `pawpal_data.json` so a developer's local/demo data
+  isn't committed to the repo.
+
+`pawpal_system.py` itself has no persistence code — `Owner`, `Pet`, and `Task`
+stay plain dataclasses, and all JSON serialization lives in `app.py` since
+it's a UI/storage concern rather than core scheduling logic.
+
 ## 📸 Demo Walkthrough
 
 ### Main UI features
@@ -137,7 +180,7 @@ The Streamlit app (`app.py`) is organized into four sections, top to bottom:
 - **Tasks** — for the currently selected pet, a form to add a task (description, duration, priority, optional fixed due time(s), frequency per day, and whether it's okay for the task to overlap another pet's task). Existing tasks are listed as expanders where you can mark a task complete/incomplete, edit any field, or delete the task.
 - **Schedule** — a "Generate schedule" button (with an "Include completed tasks" toggle) that runs the `Scheduler` and displays each pet's ordered task list plus any conflict warnings.
 
-All state (owner, pets, tasks) is persisted to `pawpal_data.json` after every interaction, so a browser refresh picks up right where you left off.
+All state (owner, pets, tasks) is persisted to `pawpal_data.json` after every interaction, so a browser refresh picks up right where you left off — see [Data Persistence](#-data-persistence) for how it works.
 
 ### Example workflow
 
