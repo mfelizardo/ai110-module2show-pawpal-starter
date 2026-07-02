@@ -13,7 +13,7 @@ owner.add_task(
 )
 owner.add_task(
     biscuit.pet_id,
-    Task("Feeding", duration=10, priority=3, due_time="08:15", concurrent_ok=True),
+    Task("Feeding", duration=10, priority=3, due_time="12:00", concurrent_ok=True),
 )
 owner.add_task(
     biscuit.pet_id,
@@ -26,7 +26,7 @@ owner.add_task(
 )
 owner.add_task(
     mochi.pet_id,
-    Task("Feeding", duration=10, priority=3, due_time="08:15", concurrent_ok=True),
+    Task("Feeding", duration=10, priority=3, due_time="12:00", concurrent_ok=True),
 )
 owner.add_task(
     mochi.pet_id,

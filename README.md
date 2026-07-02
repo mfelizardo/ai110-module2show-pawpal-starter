@@ -58,21 +58,19 @@ Paste a sample of your app's CLI or Streamlit output here so a reader can see wh
 Today's Schedule for Jordan's pets
 
 -- Biscuit (Golden Retriever) --
-  08:15  Feeding         (priority=3, 10 min)
   08:00  Morning walk    (priority=2, 30 min)
+  12:00  Feeding         (priority=3, 10 min)
   18:00  Evening walk    (priority=1, 20 min)
 
 -- Mochi (Tabby Cat) --
-  08:15  Feeding         (priority=3, 10 min)
   08:05  Litter box      (priority=1, 15 min)
   08:10  Grooming        (priority=1, 15 min)
+  12:00  Feeding         (priority=3, 10 min)
 
 Conflicts detected:
-  Biscuit's 'Feeding' overlaps with Mochi's 'Litter box'
-  Biscuit's 'Feeding' overlaps with Mochi's 'Grooming'
-  Biscuit's 'Morning walk' overlaps with Mochi's 'Feeding'
-  Biscuit's 'Morning walk' overlaps with Mochi's 'Litter box'
-  Biscuit's 'Morning walk' overlaps with Mochi's 'Grooming'
+  Biscuit's 'Morning walk' (08:00) overlaps with Mochi's 'Litter box' (08:05)
+  Biscuit's 'Morning walk' (08:00) overlaps with Mochi's 'Grooming' (08:10)
+  Mochi's 'Litter box' (08:05) overlaps with Mochi's 'Grooming' (08:10)
 ```
 
 ## 🧪 Testing PawPal+
@@ -130,12 +128,61 @@ tests\test_pawpal.py .................                                          
 
 ## 📸 Demo Walkthrough
 
-Describe your app in numbered steps so a reader can follow along without watching a video:
+### Main UI features
 
-1. <!-- Describe this step -->
-2. <!-- Describe this step -->
-3. <!-- Describe this step -->
-4. <!-- Describe this step -->
-5. <!-- Add more steps as needed -->
+The Streamlit app (`app.py`) is organized into four sections, top to bottom:
+
+- **Owner** — a single text input for the owner's name, editable at any time.
+- **Pets** — a form to add a new pet (name + breed/species), and a dropdown to switch between existing pets. An expander lets you edit a pet's name/breed in place.
+- **Tasks** — for the currently selected pet, a form to add a task (description, duration, priority, optional fixed due time(s), frequency per day, and whether it's okay for the task to overlap another pet's task). Existing tasks are listed as expanders where you can mark a task complete/incomplete, edit any field, or delete the task.
+- **Schedule** — a "Generate schedule" button (with an "Include completed tasks" toggle) that runs the `Scheduler` and displays each pet's ordered task list plus any conflict warnings.
+
+All state (owner, pets, tasks) is persisted to `pawpal_data.json` after every interaction, so a browser refresh picks up right where you left off.
+
+### Example workflow
+
+This mirrors the scenario printed by `python main.py` (see the CLI output below), built up one step at a time through the UI:
+
+1. Open the app and set the owner name to "Jordan" (the default).
+2. Add a pet, **Biscuit (Golden Retriever)**, via the "Add a pet" form — it becomes the selected pet automatically.
+3. With Biscuit selected, add three tasks:
+   - "Morning walk", 30 min, Medium priority, fixed due time 08:00.
+   - "Feeding", 10 min, High priority, fixed due time 12:00, "Okay to happen at the same time" checked (`concurrent_ok`).
+   - "Evening walk", 20 min, Low priority, fixed due time 18:00.
+4. Add a second pet, **Mochi (Tabby Cat)**, and switch the pet selector to her.
+5. With Mochi selected, add three tasks:
+   - "Litter box", 15 min, Low priority, fixed due time 08:05.
+   - "Grooming", 15 min, Low priority, fixed due time 08:10.
+   - "Feeding", 10 min, High priority, fixed due time 12:00, `concurrent_ok` checked.
+6. Click **Generate schedule**. Each pet's tasks appear sorted by time (08:00, 12:00, 18:00 for Biscuit; 08:05, 08:10, 12:00 for Mochi), and a conflict warning lists every overlapping pair in the 08:00–08:25 morning cluster — Biscuit's 08:00 walk overlaps Mochi's 08:05 litter box and 08:10 grooming, and Mochi's litter box overlaps her own grooming. The two `concurrent_ok` Feeding tasks share the exact same 12:00 slot but never appear in the conflict list, since both opted in to happening at the same time.
+7. Check "Completed" on Biscuit's morning walk and regenerate the schedule — it drops out of Biscuit's list. Toggle "Include completed tasks" to bring it back.
+
+### Key Scheduler behaviors shown
+
+- **Sorting** — tasks with a fixed `due_time` keep it; flexible tasks (no due time) are auto-assigned the earliest open slot between 08:00–20:00. The final list for each pet is ordered by start time, then descending priority, then duration for same-time ties.
+- **Conflict warnings** — any two occurrences (same pet or across pets) whose time windows overlap are flagged, unless both tasks are marked `concurrent_ok` (e.g. the two 12:00 feedings above).
+- **Recurring tasks** — a task with `frequency > 1` either gets evenly spaced auto-assigned slots across the day, or, if it needs specific times, one `due_times` entry per occurrence.
+- **Completed task filtering** — completed tasks are excluded from the generated schedule by default.
+
+### Sample CLI output (`python main.py`)
+
+```
+Today's Schedule for Jordan's pets
+
+-- Biscuit (Golden Retriever) --
+  08:00  Morning walk    (priority=2, 30 min)
+  12:00  Feeding         (priority=3, 10 min)
+  18:00  Evening walk    (priority=1, 20 min)
+
+-- Mochi (Tabby Cat) --
+  08:05  Litter box      (priority=1, 15 min)
+  08:10  Grooming        (priority=1, 15 min)
+  12:00  Feeding         (priority=3, 10 min)
+
+Conflicts detected:
+  Biscuit's 'Morning walk' (08:00) overlaps with Mochi's 'Litter box' (08:05)
+  Biscuit's 'Morning walk' (08:00) overlaps with Mochi's 'Grooming' (08:10)
+  Mochi's 'Litter box' (08:05) overlaps with Mochi's 'Grooming' (08:10)
+```
 
 **Screenshot or video** *(optional)*: <!-- Insert a screenshot or link to a demo video here -->
