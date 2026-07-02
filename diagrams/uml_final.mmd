@@ -1,12 +1,23 @@
 classDiagram
-    class Owner {
-        +String name
-        +Dict~String, Pet~ pets
-        +editName(newName: String) void
-        +editBasicPetInfo(petId: String, newName: String, newBreed: String) void
-        +addTask(petId: String, task: Task) void
-        +editTask(petId: String, taskId: String, newTask: Task) void
-        +generateDailySchedule(petId: String) Schedule
+    class Task {
+        +String taskId
+        +String description
+        +int duration
+        +int priority
+        +String dueTime
+        +List~String~ dueTimes
+        +int frequency
+        +bool completed
+        +bool concurrentOk
+        +markComplete() void
+        +markIncomplete() void
+        +fixedDueTimes() List~String~
+    }
+
+    class ScheduledTask {
+        +Task task
+        +String startTime
+        +timeWindow() Tuple
     }
 
     class Pet {
@@ -14,21 +25,67 @@ classDiagram
         +String name
         +String breed
         +List~Task~ tasks
-    }
-
-    class Task {
-        +String taskId
-        +String taskName
-        +int duration
-        +int priority
+        +addTask(task: Task) void
+        +listTasks() List~Task~
+        +getTask(taskId: String) Task
+        +removeTask(taskId: String) void
     }
 
     class Schedule {
         +Pet pet
-        +List~Task~ orderedTasks
+        +List~ScheduledTask~ occurrences
+    }
+
+    class ScheduleConflict {
+        +Pet petA
+        +Task taskA
+        +Pet petB
+        +Task taskB
+        +String startA
+        +String startB
+    }
+
+    class CombinedSchedule {
+        +Owner owner
+        +Dict~String, Schedule~ petSchedules
+        +List~ScheduleConflict~ conflicts
+    }
+
+    class Owner {
+        +String name
+        +Dict~String, Pet~ pets
+        +editName(newName: String) void
+        +addPet(pet: Pet) void
+        +listPets() List~Pet~
+        +getPet(petId: String) Pet
+        +editBasicPetInfo(petId: String, newName: String, newBreed: String) void
+        +addTask(petId: String, task: Task) void
+        +editTask(petId: String, taskId: String, newTask: Task) void
+        +getAllTasks() List~Task~
+        +generateDailySchedule(petId: String) Schedule
+    }
+
+    class Scheduler {
+        +Owner owner
+        +filterPending(tasks: List~Task~) List~Task~
+        +assignSchedule(tasks: List~Task~) List~ScheduledTask~
+        +findConflicts(petOccurrences: List) List~ScheduleConflict~
+        +generatePetSchedule(petId: String, includeCompleted: bool) Schedule
+        +generateCombinedSchedule(includeCompleted: bool) CombinedSchedule
+        -occurrencesConflict(taskA: Task, startA: int, taskB: Task, startB: int) bool
+        -findNearestSlot(task: Task, ideal: int, occupied: List) int
     }
 
     Owner "1" --> "0..*" Pet : owns
     Pet "1" --> "0..*" Task : has
-    Owner ..> Schedule : generates
+    Scheduler "1" --> "1" Owner : operates on
+    Scheduler ..> Schedule : generates
+    Scheduler ..> CombinedSchedule : generates
     Schedule --> "1" Pet : built from
+    Schedule "1" --> "0..*" ScheduledTask : contains
+    ScheduledTask --> "1" Task : wraps
+    CombinedSchedule --> "1" Owner : summarizes
+    CombinedSchedule "1" --> "0..*" Schedule : per pet
+    CombinedSchedule "1" --> "0..*" ScheduleConflict : flags
+    ScheduleConflict ..> Pet : references
+    ScheduleConflict ..> Task : references
