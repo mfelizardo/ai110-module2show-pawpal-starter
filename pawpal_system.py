@@ -26,10 +26,24 @@ class Task:
     duration: int
     priority: int
     due_time: Optional[str] = None
+    due_times: Optional[List[str]] = None
     frequency: int = 0
     completed: bool = False
     concurrent_ok: bool = False
     task_id: str = field(default_factory=_new_id)
+
+    def __post_init__(self) -> None:
+        slot_count = max(1, self.frequency)
+        if self.due_time is not None and slot_count > 1:
+            raise ValueError(
+                "A task with frequency > 1 needs one due_time per occurrence; "
+                "set due_times instead of due_time."
+            )
+        if self.due_times is not None and len(self.due_times) != slot_count:
+            raise ValueError(
+                f"due_times must have exactly {slot_count} entries to match frequency, "
+                f"got {len(self.due_times)}."
+            )
 
     def mark_complete(self) -> None:
         """Mark this task as completed."""
@@ -202,16 +216,25 @@ class Scheduler:
     def assign_schedule(self, tasks: List[Task]) -> List[ScheduledTask]:
         """Resolve a start time for every task.
 
-        Tasks with a fixed due_time keep it. Tasks without one are auto-assigned the
-        earliest free slot between 08:00-20:00; if their frequency is greater than 1,
-        that many slots are spread evenly across the day instead, nudged to the
-        nearest free time when their ideal slot conflicts with something else.
+        Tasks with a fixed due_time (or, for frequency > 1, one due_time per
+        occurrence via due_times) keep those times. Tasks without any fixed time
+        are auto-assigned the earliest free slot between 08:00-20:00; if their
+        frequency is greater than 1, that many slots are spread evenly across the
+        day instead, nudged to the nearest free time when their ideal slot
+        conflicts with something else.
         """
-        fixed = [t for t in tasks if t.due_time is not None]
-        flexible = sorted((t for t in tasks if t.due_time is None), key=lambda t: -t.priority)
+        fixed = [t for t in tasks if t.due_time is not None or t.due_times is not None]
+        flexible = sorted(
+            (t for t in tasks if t.due_time is None and t.due_times is None), key=lambda t: -t.priority
+        )
 
-        occupied: List[tuple] = [(t, _time_to_minutes(t.due_time)) for t in fixed]
-        occurrences: List[ScheduledTask] = [ScheduledTask(task=t, start_time=t.due_time) for t in fixed]
+        fixed_times: List[tuple] = [
+            (t, due_time) for t in fixed for due_time in (t.due_times if t.due_times is not None else [t.due_time])
+        ]
+        occupied: List[tuple] = [(t, _time_to_minutes(due_time)) for t, due_time in fixed_times]
+        occurrences: List[ScheduledTask] = [
+            ScheduledTask(task=t, start_time=due_time) for t, due_time in fixed_times
+        ]
 
         for task in flexible:
             slot_count = max(1, task.frequency)

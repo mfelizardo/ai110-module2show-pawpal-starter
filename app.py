@@ -24,6 +24,7 @@ def task_to_dict(task: Task) -> dict:
         "duration": task.duration,
         "priority": task.priority,
         "due_time": task.due_time,
+        "due_times": task.due_times,
         "frequency": task.frequency,
         "completed": task.completed,
         "concurrent_ok": task.concurrent_ok,
@@ -144,21 +145,34 @@ try:
     st.subheader(f"Tasks for {selected_pet.name}")
 
     st.markdown("**Add a task**")
-    check_col, _, _ = st.columns(3)
-    with check_col:
+    check_col1, check_col2, _ = st.columns(3)
+    with check_col1:
         has_due_time = st.checkbox("Has a fixed due time", value=True, key="add_task_has_due_time")
+    with check_col2:
+        add_frequency = st.number_input(
+            "Frequency (per day)", min_value=0, max_value=10, value=1, key="add_task_frequency"
+        )
+    add_slot_count = max(1, int(add_frequency))
 
     with st.form("add_task_form", clear_on_submit=True):
         description = st.text_input("Task description")
-        col1, col2, col3 = st.columns(3)
+        col1, col2 = st.columns(2)
         with col1:
             duration = st.number_input("Duration (minutes)", min_value=1, max_value=240, value=20)
         with col2:
             priority_label = st.selectbox("Priority", list(PRIORITY_LABELS.keys()), index=1)
-        with col3:
-            frequency = st.number_input("Frequency (per day)", min_value=0, max_value=10, value=1)
 
-        due_time_value = st.time_input("Due time", value=datetime.time(8, 0)) if has_due_time else None
+        due_time_value = None
+        due_times_values = None
+        if has_due_time:
+            if add_slot_count == 1:
+                due_time_value = st.time_input("Due time", value=datetime.time(8, 0))
+            else:
+                st.caption(f"This task happens {add_slot_count}x/day — set a due time for each occurrence.")
+                due_times_values = [
+                    st.time_input(f"Due time #{i + 1}", value=datetime.time(8, 0), key=f"add_due_time_{i}")
+                    for i in range(add_slot_count)
+                ]
 
         concurrent_ok = st.checkbox("Okay to happen at the same time as another pet's task")
 
@@ -169,8 +183,11 @@ try:
                     description=description,
                     duration=int(duration),
                     priority=PRIORITY_LABELS[priority_label],
-                    due_time=due_time_value.strftime("%H:%M") if has_due_time else None,
-                    frequency=int(frequency),
+                    due_time=due_time_value.strftime("%H:%M") if due_time_value else None,
+                    due_times=(
+                        [t.strftime("%H:%M") for t in due_times_values] if due_times_values else None
+                    ),
+                    frequency=int(add_frequency),
                     concurrent_ok=concurrent_ok,
                 ),
             )
@@ -181,7 +198,7 @@ try:
         st.info("No tasks yet for this pet. Add one above.")
     else:
         for task in tasks:
-            due_label = task.due_time or "no fixed time"
+            due_label = ", ".join(task.due_times) if task.due_times else (task.due_time or "no fixed time")
             header = f"{'✅' if task.completed else '⬜'} {task.description} — {PRIORITY_NAMES[task.priority]} priority, {task.duration} min, {due_label}"
             with st.expander(header):
                 completed = st.checkbox("Completed", value=task.completed, key=f"completed_{task.task_id}")
@@ -190,9 +207,17 @@ try:
 
                 e_has_due_time = st.checkbox(
                     "Has a fixed due time",
-                    value=task.due_time is not None,
+                    value=task.due_time is not None or task.due_times is not None,
                     key=f"has_due_time_{task.task_id}",
                 )
+                e_frequency = st.number_input(
+                    "Frequency (per day)",
+                    min_value=0,
+                    max_value=10,
+                    value=task.frequency,
+                    key=f"frequency_{task.task_id}",
+                )
+                e_slot_count = max(1, int(e_frequency))
 
                 with st.form(f"edit_task_form_{task.task_id}"):
                     e_description = st.text_input("Description", value=task.description)
@@ -204,21 +229,37 @@ try:
                         list(PRIORITY_LABELS.keys()),
                         index=list(PRIORITY_LABELS.values()).index(task.priority),
                     )
-                    e_due_time_value = (
-                        st.time_input(
-                            "Due time",
-                            value=(
-                                datetime.datetime.strptime(task.due_time, "%H:%M").time()
-                                if task.due_time
-                                else datetime.time(8, 0)
-                            ),
-                        )
-                        if e_has_due_time
-                        else None
-                    )
-                    e_frequency = st.number_input(
-                        "Frequency (per day)", min_value=0, max_value=10, value=task.frequency
-                    )
+
+                    e_due_time_value = None
+                    e_due_times_values = None
+                    if e_has_due_time:
+                        existing_due_times = task.due_times or []
+                        if e_slot_count == 1:
+                            e_due_time_value = st.time_input(
+                                "Due time",
+                                value=(
+                                    datetime.datetime.strptime(task.due_time, "%H:%M").time()
+                                    if task.due_time
+                                    else datetime.time(8, 0)
+                                ),
+                            )
+                        else:
+                            st.caption(
+                                f"This task happens {e_slot_count}x/day — set a due time for each occurrence."
+                            )
+                            e_due_times_values = [
+                                st.time_input(
+                                    f"Due time #{i + 1}",
+                                    value=(
+                                        datetime.datetime.strptime(existing_due_times[i], "%H:%M").time()
+                                        if i < len(existing_due_times)
+                                        else datetime.time(8, 0)
+                                    ),
+                                    key=f"edit_due_time_{task.task_id}_{i}",
+                                )
+                                for i in range(e_slot_count)
+                            ]
+
                     e_concurrent_ok = st.checkbox("Okay to happen at the same time", value=task.concurrent_ok)
 
                     save_col, delete_col = st.columns(2)
@@ -235,7 +276,12 @@ try:
                                 description=e_description,
                                 duration=int(e_duration),
                                 priority=PRIORITY_LABELS[e_priority_label],
-                                due_time=e_due_time_value.strftime("%H:%M") if e_has_due_time else None,
+                                due_time=e_due_time_value.strftime("%H:%M") if e_due_time_value else None,
+                                due_times=(
+                                    [t.strftime("%H:%M") for t in e_due_times_values]
+                                    if e_due_times_values
+                                    else None
+                                ),
                                 frequency=int(e_frequency),
                                 completed=task.completed,
                                 concurrent_ok=e_concurrent_ok,
@@ -264,7 +310,7 @@ try:
                 continue
             for occurrence in pet_schedule.occurrences:
                 task = occurrence.task
-                auto_label = "" if task.due_time else " (auto-assigned)"
+                auto_label = "" if (task.due_time or task.due_times) else " (auto-assigned)"
                 st.write(f"  {occurrence.start_time}  {task.description} ({task.duration} min){auto_label}")
 
         if combined.conflicts:

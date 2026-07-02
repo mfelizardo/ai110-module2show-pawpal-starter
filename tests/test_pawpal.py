@@ -1,4 +1,34 @@
+import pytest
+
 from pawpal_system import Owner, Pet, Scheduler, Task
+
+
+def test_due_time_with_frequency_greater_than_one_is_rejected():
+    with pytest.raises(ValueError):
+        Task(description="Feeding", duration=15, priority=1, due_time="08:00", frequency=3)
+
+
+def test_due_times_length_must_match_frequency():
+    with pytest.raises(ValueError):
+        Task(description="Feeding", duration=15, priority=1, due_times=["08:00", "12:00"], frequency=3)
+
+
+def test_due_times_matching_frequency_is_accepted_and_scheduled():
+    pet = Pet(name="Fido", breed="Labrador")
+    pet.add_task(
+        Task(
+            description="Feeding",
+            duration=15,
+            priority=1,
+            due_times=["08:00", "12:00", "18:00"],
+            frequency=3,
+        )
+    )
+
+    schedule = _schedule_for(pet)
+
+    start_times = sorted(o.start_time for o in schedule.occurrences)
+    assert start_times == ["08:00", "12:00", "18:00"]
 
 
 def test_mark_complete_changes_status():
